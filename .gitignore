@@ -76,3 +76,8 @@ tmp*
 
 # Added entries (1 items)
 *.bak
+
+# Added entries (3 items)
+*.exe
+bin/
+target/
