@@ -1,0 +1,32 @@
+{
+  "colors": {
+    "interface_name": { "fg": "#FFFFFF", "bg": "#0000FF", "attributes": ["bold","italic"] },
+    "label_status":   { "fg": "#FFFF00", "attributes": ["bold"] },
+    "value_status_up":   {},
+    "value_status_down": {},
+    "label_ipv4":     { "fg": "#FFAA00", "attributes": ["bold"] },
+    "value_ipv4":     { "fg": "#FFFF00" },
+    "label_netmask":  { "fg": "#00FF00", "attributes": ["bold"] },
+    "value_netmask":  { "fg": "#0055FF", "attributes": ["bold"] },
+    "label_mac":      { "fg": "#FFFF00", "attributes": ["bold"] },
+    "value_mac":      { "fg": "#00FF00" },
+    "label_gateway":  { "fg": "#0000FF", "attributes": ["bold"] },
+    "value_gateway":  { "fg": "#00FFFF" },
+    "label_dns":      { "fg": "#FF00FF", "attributes": ["bold"] },
+    "value_dns":      {},
+    "value_speed":    { "fg": "#00FF00", "attributes": ["bold"] },
+    "value_mtu":      { "fg": "#0000FF", "attributes": ["bold"] },
+    "table_header":   { "fg": "#0000FF", "attributes": ["bold"] },
+    "table_interface":{ "fg": "#00FFFF" },
+    "table_ipv4":     { "fg": "#00FF00" },
+    "table_mac":      { "fg": "#FFFF00" },
+    "table_gateway":  { "fg": "#0000FF" },
+    "table_dns":      { "fg": "#FF00FF" },
+    "error":          { "fg": "#FF0000" },
+    "success":        { "fg": "#00FF00" },
+    "warning":        { "fg": "#FFFF00" },
+    "info_cyan":      { "fg": "#00FFFF" },
+    "dim":            { "attributes": ["dim"] }
+  },
+  "backup_file": "~/.ifconfig_backup.json"
+}
