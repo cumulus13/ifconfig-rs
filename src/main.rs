@@ -1,3 +1,9 @@
+// File: src\main.rs
+// Author: Hadi Cahyadi <cumulus13@gmail.com>
+// Date: 2026-05-05
+// Description: 
+// License: MIT
+
 use clap::Parser;
 use comfy_table::{presets::UTF8_FULL, ContentArrangement, Table};
 use serde::{Deserialize, Serialize};
@@ -8,9 +14,10 @@ use std::process::Command;
 
 use windows::Win32::Foundation::{ERROR_BUFFER_OVERFLOW, ERROR_SUCCESS};
 use windows::Win32::NetworkManagement::IpHelper::{
-    GetAdaptersAddresses, IfOperStatusUp, GAA_FLAG_INCLUDE_GATEWAYS,
+    GetAdaptersAddresses, GAA_FLAG_INCLUDE_GATEWAYS,
     GAA_FLAG_INCLUDE_PREFIX, IP_ADAPTER_ADDRESSES,
 };
+use windows::Win32::NetworkManagement::Ndis::IfOperStatusUp;
 use windows::Win32::Networking::WinSock::{AF_INET, AF_UNSPEC, SOCKADDR_IN};
 use windows::Win32::UI::Shell::IsUserAnAdmin;
 

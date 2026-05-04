@@ -1,6 +1,6 @@
 [package]
 name = "ifconfig"
-version = "1.0.1"
+version = "1.0.3"
 edition = "2021"
 
 [dependencies]
@@ -15,6 +15,7 @@ arboard = "3.4"
 version = "0.52"
 features = [
     "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis",
     "Win32_Networking_WinSock",
     "Win32_Foundation",
     "Win32_UI_Shell",
