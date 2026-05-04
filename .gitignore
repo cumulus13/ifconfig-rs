@@ -81,3 +81,6 @@ tmp*
 *.exe
 bin/
 target/
+
+# Added entries (1 items)
+download/
