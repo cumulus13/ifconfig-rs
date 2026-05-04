@@ -333,7 +333,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "ifconfig-rs"
-version = "1.0.11"
+version = "1.0.12"
 dependencies = [
  "arboard",
  "clap",
@@ -342,6 +342,7 @@ dependencies = [
  "serde",
  "serde_json",
  "windows",
+ "winreg",
 ]
 
 [[package]]
@@ -1044,6 +1045,16 @@ name = "windows_x86_64_msvc"
 version = "0.53.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6bbff5f0aada427a1e5a6da5f1f98158182f26556f345ac9e04d36d0ebed650"
+
+[[package]]
+name = "winreg"
+version = "0.52.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a277a57398d4bfa075df44f501a17cfdf8542d224f0d36095a2adc7aee4ef0a5"
+dependencies = [
+ "cfg-if",
+ "windows-sys 0.48.0",
+]
 
 [[package]]
 name = "x11rb"
