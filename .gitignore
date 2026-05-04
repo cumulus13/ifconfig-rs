@@ -71,3 +71,5 @@ Thumbs.db
 
 # Added entries (1 items)
 tmp*
+# PT backup directory
+.pt/
