@@ -21,6 +21,9 @@ use windows::Win32::NetworkManagement::Ndis::IfOperStatusUp;
 use windows::Win32::Networking::WinSock::{AF_INET, AF_UNSPEC, SOCKADDR_IN};
 use windows::Win32::UI::Shell::IsUserAnAdmin;
 
+use winreg::enums::HKEY_LOCAL_MACHINE;
+use winreg::RegKey;
+
 /* ================================================================
    Config & Styles
    ================================================================ */
@@ -443,23 +446,58 @@ unsafe fn get_interfaces() -> Result<Vec<Interface>, io::Error> {
         }
 
         // DNS servers
-        let mut dns = Vec::new();
-        let mut d = a.FirstDnsServerAddress;
-        while !d.is_null() {
-            let da = &*d;
-            if let Some(sa) = da.Address.lpSockaddr.as_ref() {
-                if sa.sa_family == AF_INET {
-                    let sin = *(da.Address.lpSockaddr as *const SOCKADDR_IN);
-                    let b = [
-                        sin.sin_addr.S_un.S_un_b.s_b1,
-                        sin.sin_addr.S_un.S_un_b.s_b2,
-                        sin.sin_addr.S_un.S_un_b.s_b3,
-                        sin.sin_addr.S_un.S_un_b.s_b4,
-                    ];
-                    dns.push(format!("{}.{}.{}.{}", b[0], b[1], b[2], b[3]));
+        // let mut dns = Vec::new();
+        // let mut d = a.FirstDnsServerAddress;
+        // while !d.is_null() {
+        //     let da = &*d;
+        //     if let Some(sa) = da.Address.lpSockaddr.as_ref() {
+        //         if sa.sa_family == AF_INET {
+        //             let sin = *(da.Address.lpSockaddr as *const SOCKADDR_IN);
+        //             let b = [
+        //                 sin.sin_addr.S_un.S_un_b.s_b1,
+        //                 sin.sin_addr.S_un.S_un_b.s_b2,
+        //                 sin.sin_addr.S_un.S_un_b.s_b3,
+        //                 sin.sin_addr.S_un.S_un_b.s_b4,
+        //             ];
+        //             dns.push(format!("{}.{}.{}.{}", b[0], b[1], b[2], b[3]));
+        //         }
+        //     }
+        //     d = da.Next;
+        // }
+        
+        // AdapterName = GUID string, e.g. "{12345678-...}"
+        let guid = if !a.AdapterName.0.is_null() {
+            let len = (0..)
+                .take_while(|&i| *a.AdapterName.0.add(i) != 0)
+                .count();
+            let slice = std::slice::from_raw_parts(a.AdapterName.0, len);
+            String::from_utf8_lossy(slice).into_owned()
+        } else {
+            String::new()
+        };
+
+        // DNS servers — registry is reliable for both DHCP & static
+        let mut dns = get_dns_from_registry(&guid);
+
+        // Fallback to GetAdaptersAddresses if registry somehow empty
+        if dns.is_empty() {
+            let mut d = a.FirstDnsServerAddress;
+            while !d.is_null() {
+                let da = &*d;
+                if let Some(sa) = da.Address.lpSockaddr.as_ref() {
+                    if sa.sa_family == AF_INET {
+                        let sin = *(da.Address.lpSockaddr as *const SOCKADDR_IN);
+                        let b = [
+                            sin.sin_addr.S_un.S_un_b.s_b1,
+                            sin.sin_addr.S_un.S_un_b.s_b2,
+                            sin.sin_addr.S_un.S_un_b.s_b3,
+                            sin.sin_addr.S_un.S_un_b.s_b4,
+                        ];
+                        dns.push(format!("{}.{}.{}.{}", b[0], b[1], b[2], b[3]));
+                    }
                 }
+                d = da.Next;
             }
-            d = da.Next;
         }
 
         out.push(Interface {
@@ -980,6 +1018,43 @@ fn show_help_examples(cfg: &Config) {
         apply_style("# Copy IP to clipboard", &cfg.colors.success)
     );
     println!("  ifconfig.exe -g vmnet8");
+}
+
+fn get_dns_from_registry(guid: &str) -> Vec<String> {
+    let path = format!(
+        r"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\{}",
+        guid
+    );
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let Ok(key) = hklm.open_subkey(&path) else {
+        return vec![];
+    };
+
+    // Static DNS first
+    if let Ok(val) = key.get_value::<String, _>("NameServer") {
+        let v: Vec<String> = val
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if !v.is_empty() {
+            return v;
+        }
+    }
+
+    // DHCP DNS fallback
+    if let Ok(val) = key.get_value::<String, _>("DhcpNameServer") {
+        let v: Vec<String> = val
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if !v.is_empty() {
+            return v;
+        }
+    }
+
+    vec![]
 }
 
 /* ================================================================
