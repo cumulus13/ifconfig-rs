@@ -331,7 +331,7 @@ unsafe fn get_interfaces() -> Result<Vec<Interface>, io::Error> {
         &mut buf_len,
     );
 
-    if ret != ERROR_SUCCESS && ret != ERROR_BUFFER_OVERFLOW {
+    if ret != ERROR_SUCCESS.0 && ret != ERROR_BUFFER_OVERFLOW.0 {
         return Err(io::Error::last_os_error());
     }
 
@@ -346,7 +346,7 @@ unsafe fn get_interfaces() -> Result<Vec<Interface>, io::Error> {
         &mut buf_len,
     );
 
-    if ret != ERROR_SUCCESS {
+    if ret != ERROR_SUCCESS.0 {
         return Err(io::Error::last_os_error());
     }
 
@@ -356,12 +356,12 @@ unsafe fn get_interfaces() -> Result<Vec<Interface>, io::Error> {
     while !cur.is_null() {
         let a = &*cur;
 
-        // FriendlyName (wide string)
-        let name = if !a.FriendlyName.is_null() {
+        // FriendlyName (wide string) — PWSTR.0 is the raw *mut u16
+        let name = if !a.FriendlyName.0.is_null() {
             let len = (0..)
-                .take_while(|&i| *a.FriendlyName.add(i) != 0)
+                .take_while(|&i| *a.FriendlyName.0.add(i) != 0)
                 .count();
-            let slice = std::slice::from_raw_parts(a.FriendlyName, len);
+            let slice = std::slice::from_raw_parts(a.FriendlyName.0, len);
             String::from_utf16_lossy(slice)
         } else {
             "Unknown".into()
