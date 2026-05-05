@@ -1,6 +1,6 @@
 [package]
 name = "ifconfig-rs"
-version = "1.0.16"
+version = "1.0.17"
 authors = ["Hadi Cahyadi <cumulus13@gmail.com>"]
 description = "Advanced Windows network interface configuration tool with rich terminal output"
 repository = "https://github.com/cumulus13/ifconfig-rs"
