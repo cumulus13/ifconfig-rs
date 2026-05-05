@@ -1,11 +1,26 @@
 [package]
 name = "ifconfig-rs"
-version = "1.0.14"
+version = "1.0.15"
+authors = ["Hadi Cahyadi <cumulus13@gmail.com>"]
+description = "Advanced Windows network interface configuration tool with rich terminal output"
+repository = "https://github.com/cumulus13/ifconfig-rs"
+homepage = "https://github.com/cumulus13/ifconfig-rs"
+license = "MIT"
+keywords = ["network", "windows", "ifconfig", "ipconfig", "netsh"]
+categories = ["command-line-utilities", "network-programming"]
 edition = "2021"
+rust-version = "1.74"
 
 [[bin]]
 name = "ifconfig"
 path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
@@ -15,6 +30,9 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 arboard = "3.4"
 winreg = "0.52"
+thiserror = "1.0"
+tracing = { version = "0.1", features = ["release_max_level_warn"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dependencies.windows]
 version = "0.52"
@@ -25,3 +43,10 @@ features = [
     "Win32_Foundation",
     "Win32_UI_Shell",
 ]
+
+[dev-dependencies]
+tempfile = "3.10"
+
+[package.metadata.docs.rs]
+default-target = "x86_64-pc-windows-msvc"
+targets = ["x86_64-pc-windows-msvc"]
