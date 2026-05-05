@@ -23,9 +23,6 @@ use windows::Win32::NetworkManagement::Ndis::IfOperStatusUp;
 use windows::Win32::Networking::WinSock::{AF_INET, AF_UNSPEC, SOCKADDR_IN};
 use windows::Win32::UI::Shell::IsUserAnAdmin;
 
-use winreg::enums::HKEY_LOCAL_MACHINE;
-use winreg::RegKey;
-
 /* ================================================================
    Config & Styles
    ================================================================ */
