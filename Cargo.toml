@@ -1,6 +1,6 @@
 [package]
 name = "ifconfig-rs"
-version = "1.0.18"
+version = "1.0.19"
 authors = ["Hadi Cahyadi <cumulus13@gmail.com>"]
 description = "Advanced Windows network interface configuration tool with rich terminal output"
 repository = "https://github.com/cumulus13/ifconfig-rs"
@@ -22,6 +22,7 @@ strip = true
 codegen-units = 1
 panic = "abort"
 
+# Cross-platform dependencies
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
 clap-version-flag = "1.0.7"
@@ -29,13 +30,16 @@ comfy-table = "7.1"
 dirs = "5.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-arboard = "3.4"
-winreg = "0.52"
 thiserror = "1.0"
 tracing = { version = "0.1", features = ["release_max_level_warn"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-[dependencies.windows]
+# Windows-only dependencies
+[target.'cfg(windows)'.dependencies]
+arboard = "3.4"
+winreg = "0.52"
+
+[target.'cfg(windows)'.dependencies.windows]
 version = "0.52"
 features = [
     "Win32_NetworkManagement_IpHelper",

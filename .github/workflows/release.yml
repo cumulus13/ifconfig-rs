@@ -10,7 +10,7 @@ env:
 
 jobs:
   # ==========================================================================
-  # BUILD & RELEASE BINARY
+  # BUILD & RELEASE BINARY (Windows only)
   # ==========================================================================
   build-release:
     name: Build Windows Release
@@ -62,7 +62,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ==========================================================================
-  # PUBLISH TO CRATES.IO
+  # PUBLISH TO CRATES.IO (Cross-platform compile check)
   # ==========================================================================
   publish-crates:
     name: Publish to crates.io
@@ -76,7 +76,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Verify package
+      - name: Verify package (all targets)
         run: cargo publish --dry-run --locked
 
       - name: Publish to crates.io
