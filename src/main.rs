@@ -11,6 +11,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use winreg::enums::HKEY_LOCAL_MACHINE;
+use winreg::RegKey;
 
 use windows::Win32::Foundation::{ERROR_BUFFER_OVERFLOW, ERROR_SUCCESS};
 use windows::Win32::NetworkManagement::IpHelper::{
@@ -295,6 +297,47 @@ struct Args {
 }
 
 /* ================================================================
+   Registry DNS reader (no WMI)
+   ================================================================ */
+
+fn get_dns_from_registry(guid: &str) -> Vec<String> {
+    let path = format!(
+        r"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\{}",
+        guid
+    );
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let Ok(key) = hklm.open_subkey(&path) else {
+        return vec![];
+    };
+
+    // Static DNS first
+    if let Ok(val) = key.get_value::<String, _>("NameServer") {
+        let v: Vec<String> = val
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if !v.is_empty() {
+            return v;
+        }
+    }
+
+    // DHCP DNS fallback
+    if let Ok(val) = key.get_value::<String, _>("DhcpNameServer") {
+        let v: Vec<String> = val
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if !v.is_empty() {
+            return v;
+        }
+    }
+
+    vec![]
+}
+
+/* ================================================================
    Network Interface (GetAdaptersAddresses — no WMI)
    ================================================================ */
 
@@ -312,14 +355,10 @@ struct Interface {
 }
 
 fn prefix_to_netmask(prefix: u8) -> String {
-    if prefix > 32 {
+    if prefix == 0 || prefix > 32 {
         return "-".into();
     }
-    let mask: u32 = if prefix == 0 {
-        0
-    } else {
-        u32::MAX << (32 - prefix)
-    };
+    let mask: u32 = u32::MAX << (32 - prefix);
     let b = mask.to_be_bytes();
     format!("{}.{}.{}.{}", b[0], b[1], b[2], b[3])
 }
@@ -368,6 +407,17 @@ unsafe fn get_interfaces() -> Result<Vec<Interface>, io::Error> {
             String::from_utf16_lossy(slice)
         } else {
             "Unknown".into()
+        };
+
+        // AdapterName = GUID (ASCII)
+        let guid = if !a.AdapterName.0.is_null() {
+            let len = (0..)
+                .take_while(|&i| *a.AdapterName.0.add(i) != 0)
+                .count();
+            let slice = std::slice::from_raw_parts(a.AdapterName.0, len);
+            String::from_utf8_lossy(slice).into_owned()
+        } else {
+            String::new()
         };
 
         // Status
@@ -444,37 +494,6 @@ unsafe fn get_interfaces() -> Result<Vec<Interface>, io::Error> {
             }
             g = ga.Next;
         }
-
-        // DNS servers
-        // let mut dns = Vec::new();
-        // let mut d = a.FirstDnsServerAddress;
-        // while !d.is_null() {
-        //     let da = &*d;
-        //     if let Some(sa) = da.Address.lpSockaddr.as_ref() {
-        //         if sa.sa_family == AF_INET {
-        //             let sin = *(da.Address.lpSockaddr as *const SOCKADDR_IN);
-        //             let b = [
-        //                 sin.sin_addr.S_un.S_un_b.s_b1,
-        //                 sin.sin_addr.S_un.S_un_b.s_b2,
-        //                 sin.sin_addr.S_un.S_un_b.s_b3,
-        //                 sin.sin_addr.S_un.S_un_b.s_b4,
-        //             ];
-        //             dns.push(format!("{}.{}.{}.{}", b[0], b[1], b[2], b[3]));
-        //         }
-        //     }
-        //     d = da.Next;
-        // }
-        
-        // AdapterName = GUID string, e.g. "{12345678-...}"
-        let guid = if !a.AdapterName.0.is_null() {
-            let len = (0..)
-                .take_while(|&i| *a.AdapterName.0.add(i) != 0)
-                .count();
-            let slice = std::slice::from_raw_parts(a.AdapterName.0, len);
-            String::from_utf8_lossy(slice).into_owned()
-        } else {
-            String::new()
-        };
 
         // DNS servers — registry is reliable for both DHCP & static
         let mut dns = get_dns_from_registry(&guid);
@@ -569,10 +588,19 @@ fn save_current_config(
     backup: &Path,
     cfg: &Config,
 ) -> io::Result<bool> {
-    let current = ifaces
+    let Some(current) = ifaces
         .iter()
         .find(|i| i.name.to_lowercase().contains(&iface_name.to_lowercase()))
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Interface not found"))?;
+    else {
+        println!(
+            "{}",
+            apply_style(
+                &format!("Interface '{}' not found!", iface_name),
+                &cfg.colors.error
+            )
+        );
+        return Ok(false);
+    };
 
     let mut map: serde_json::Map<String, serde_json::Value> = if backup.exists() {
         fs::read_to_string(backup)
@@ -605,6 +633,20 @@ fn save_current_config(
    netsh wrappers (no PowerShell)
    ================================================================ */
 
+fn netsh_error(msg: &str, stderr: &[u8], stdout: &[u8], cfg: &Config) {
+    let mut text = String::from_utf8_lossy(stderr).into_owned();
+    if text.trim().is_empty() {
+        text = String::from_utf8_lossy(stdout).into_owned();
+    }
+    if text.trim().is_empty() {
+        text = "Command failed with non-zero exit code".into();
+    }
+    println!(
+        "{}",
+        apply_style(&format!("{}: {}", msg, text.trim()), &cfg.colors.error)
+    );
+}
+
 fn set_interface_config(
     iface: &str,
     ip: &str,
@@ -627,19 +669,13 @@ fn set_interface_config(
 
     // IP + netmask + optional gateway
     if ip != "0" && netmask != "0" {
-        let mut cmd = Command::new("netsh");
-        cmd.arg("interface")
-            .arg("ip")
-            .arg("set")
-            .arg("address")
-            .arg(iface)
-            .arg("static")
-            .arg(ip)
-            .arg(netmask);
-
+        let mut cmd_str = format!(
+            r#"netsh interface ip set address "{}" static {} {}"#,
+            iface, ip, netmask
+        );
         let has_gw = gateway != "0" && gateway != "-" && !gateway.is_empty();
         if has_gw {
-            cmd.arg(gateway);
+            cmd_str.push_str(&format!(" {}", gateway));
         }
 
         println!(
@@ -652,30 +688,36 @@ fn set_interface_config(
                 apply_style(&format!("Setting Gateway: {}", gateway), &cfg.colors.info_cyan)
             );
         }
+        println!("{}", apply_style(&format!("Command: {}", cmd_str), &cfg.colors.dim));
+
+        let mut cmd = Command::new("netsh");
+        cmd.arg("interface")
+            .arg("ip")
+            .arg("set")
+            .arg("address")
+            .arg(iface)
+            .arg("static")
+            .arg(ip)
+            .arg(netmask);
+        if has_gw {
+            cmd.arg(gateway);
+        }
 
         let out = cmd.output()?;
         if !out.status.success() {
-            let msg = String::from_utf8_lossy(&out.stderr);
-            let msg = if msg.trim().is_empty() {
-                String::from_utf8_lossy(&out.stdout).into_owned()
-            } else {
-                msg.into_owned()
-            };
-            println!(
-                "{}",
-                apply_style(&format!("Error setting IP: {}", msg.trim()), &cfg.colors.error)
-            );
+            netsh_error("Error setting IP", &out.stderr, &out.stdout, cfg);
             return Ok(false);
-        } else {
-            println!(
-                "{}",
-                apply_style("✓ IP address set successfully", &cfg.colors.success)
-            );
         }
+        println!(
+            "{}",
+            apply_style("✓ IP address set successfully", &cfg.colors.success)
+        );
     }
 
     // DNS
     if !dns.is_empty() {
+        let clear_cmd = format!(r#"netsh interface ip set dns "{}" dhcp"#, iface);
+        println!("{}", apply_style(&format!("Clearing DNS: {}", clear_cmd), &cfg.colors.dim));
         let _ = Command::new("netsh")
             .args(["interface", "ip", "set", "dns", iface, "dhcp"])
             .output();
@@ -684,6 +726,24 @@ fn set_interface_config(
             if server == "0" || server == "-" || server.is_empty() {
                 continue;
             }
+
+            let cmd_str = if i == 0 {
+                format!(r#"netsh interface ip set dns "{}" static {}"#, iface, server)
+            } else {
+                format!(
+                    r#"netsh interface ip add dns "{}" {} index={}"#,
+                    iface,
+                    server,
+                    i + 1
+                )
+            };
+
+            println!(
+                "{}",
+                apply_style(&format!("Setting DNS {}: {}", i + 1, server), &cfg.colors.info_cyan)
+            );
+            println!("{}", apply_style(&format!("Command: {}", cmd_str), &cfg.colors.dim));
+
             let mut cmd = Command::new("netsh");
             if i == 0 {
                 cmd.args(["interface", "ip", "set", "dns", iface, "static", server]);
@@ -699,26 +759,9 @@ fn set_interface_config(
                 ]);
             }
 
-            println!(
-                "{}",
-                apply_style(
-                    &format!("Setting DNS {}: {}", i + 1, server),
-                    &cfg.colors.info_cyan
-                )
-            );
-
             let out = cmd.output()?;
             if !out.status.success() {
-                let msg = String::from_utf8_lossy(&out.stderr);
-                let msg = if msg.trim().is_empty() {
-                    String::from_utf8_lossy(&out.stdout).into_owned()
-                } else {
-                    msg.into_owned()
-                };
-                println!(
-                    "{}",
-                    apply_style(&format!("Error setting DNS: {}", msg.trim()), &cfg.colors.error)
-                );
+                netsh_error("Error setting DNS", &out.stderr, &out.stdout, cfg);
             } else {
                 println!(
                     "{}",
@@ -750,6 +793,8 @@ fn set_dns_only(iface: &str, dns: &[String], cfg: &Config) -> io::Result<bool> {
         )
     );
 
+    let clear_cmd = format!(r#"netsh interface ip set dns "{}" dhcp"#, iface);
+    println!("{}", apply_style(&format!("Clearing DNS: {}", clear_cmd), &cfg.colors.dim));
     let _ = Command::new("netsh")
         .args(["interface", "ip", "set", "dns", iface, "dhcp"])
         .output();
@@ -758,6 +803,24 @@ fn set_dns_only(iface: &str, dns: &[String], cfg: &Config) -> io::Result<bool> {
         if server == "0" || server.is_empty() {
             continue;
         }
+
+        let cmd_str = if i == 0 {
+            format!(r#"netsh interface ip set dns "{}" static {}"#, iface, server)
+        } else {
+            format!(
+                r#"netsh interface ip add dns "{}" {} index={}"#,
+                iface,
+                server,
+                i + 1
+            )
+        };
+
+        println!(
+            "{}",
+            apply_style(&format!("Setting DNS {}: {}", i + 1, server), &cfg.colors.info_cyan)
+        );
+        println!("{}", apply_style(&format!("Command: {}", cmd_str), &cfg.colors.dim));
+
         let mut cmd = Command::new("netsh");
         if i == 0 {
             cmd.args(["interface", "ip", "set", "dns", iface, "static", server]);
@@ -773,36 +836,18 @@ fn set_dns_only(iface: &str, dns: &[String], cfg: &Config) -> io::Result<bool> {
             ]);
         }
 
+        let out = cmd.output()?;
+        if !out.status.success() {
+            netsh_error("Error setting DNS", &out.stderr, &out.stdout, cfg);
+            return Ok(false);
+        }
         println!(
             "{}",
             apply_style(
-                &format!("Setting DNS {}: {}", i + 1, server),
-                &cfg.colors.info_cyan
+                &format!("✓ DNS {} set successfully", i + 1),
+                &cfg.colors.success
             )
         );
-
-        let out = cmd.output()?;
-        if !out.status.success() {
-            let msg = String::from_utf8_lossy(&out.stderr);
-            let msg = if msg.trim().is_empty() {
-                String::from_utf8_lossy(&out.stdout).into_owned()
-            } else {
-                msg.into_owned()
-            };
-            println!(
-                "{}",
-                apply_style(&format!("Error setting DNS: {}", msg.trim()), &cfg.colors.error)
-            );
-            return Ok(false);
-        } else {
-            println!(
-                "{}",
-                apply_style(
-                    &format!("✓ DNS {} set successfully", i + 1),
-                    &cfg.colors.success
-                )
-            );
-        }
     }
 
     println!(
@@ -831,13 +876,7 @@ fn set_dhcp(iface: &str, backup: &Path, cfg: &Config) -> io::Result<bool> {
         .args(["interface", "ip", "set", "address", iface, "dhcp"])
         .output()?;
     if !out.status.success() {
-        println!(
-            "{}",
-            apply_style(
-                &format!("Error setting DHCP: {}", String::from_utf8_lossy(&out.stderr).trim()),
-                &cfg.colors.error
-            )
-        );
+        netsh_error("Error setting DHCP", &out.stderr, &out.stdout, cfg);
         return Ok(false);
     }
 
@@ -845,16 +884,7 @@ fn set_dhcp(iface: &str, backup: &Path, cfg: &Config) -> io::Result<bool> {
         .args(["interface", "ip", "set", "dns", iface, "dhcp"])
         .output()?;
     if !out.status.success() {
-        println!(
-            "{}",
-            apply_style(
-                &format!(
-                    "Error setting DNS to DHCP: {}",
-                    String::from_utf8_lossy(&out.stderr).trim()
-                ),
-                &cfg.colors.error
-            )
-        );
+        netsh_error("Error setting DNS to DHCP", &out.stderr, &out.stdout, cfg);
         return Ok(false);
     }
 
@@ -909,6 +939,7 @@ fn restore_config(iface: &str, backup: &Path, cfg: &Config) -> io::Result<bool> 
    ================================================================ */
 
 fn print_as_table(ifaces: &[Interface], cfg: &Config) {
+    println!("{}", apply_style("Network Interfaces", &cfg.colors.table_header));
     let mut table = Table::new();
     table.load_preset(UTF8_FULL);
     table.set_content_arrangement(ContentArrangement::Dynamic);
@@ -926,6 +957,11 @@ fn print_as_table(ifaces: &[Interface], cfg: &Config) {
     ]);
 
     for i in ifaces {
+        let dns_str = if i.dns.is_empty() {
+            "-".into()
+        } else {
+            i.dns.join(", ")
+        };
         table.add_row(vec![
             apply_style(&i.name, &cfg.colors.table_interface),
             i.status.clone(),
@@ -935,7 +971,7 @@ fn print_as_table(ifaces: &[Interface], cfg: &Config) {
             i.netmask.clone(),
             apply_style(&i.mac, &cfg.colors.table_mac),
             apply_style(&i.gateway, &cfg.colors.table_gateway),
-            apply_style(&i.dns.join(", "), &cfg.colors.table_dns),
+            apply_style(&dns_str, &cfg.colors.table_dns),
         ]);
     }
 
@@ -1018,43 +1054,6 @@ fn show_help_examples(cfg: &Config) {
         apply_style("# Copy IP to clipboard", &cfg.colors.success)
     );
     println!("  ifconfig.exe -g vmnet8");
-}
-
-fn get_dns_from_registry(guid: &str) -> Vec<String> {
-    let path = format!(
-        r"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\{}",
-        guid
-    );
-    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let Ok(key) = hklm.open_subkey(&path) else {
-        return vec![];
-    };
-
-    // Static DNS first
-    if let Ok(val) = key.get_value::<String, _>("NameServer") {
-        let v: Vec<String> = val
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
-        if !v.is_empty() {
-            return v;
-        }
-    }
-
-    // DHCP DNS fallback
-    if let Ok(val) = key.get_value::<String, _>("DhcpNameServer") {
-        let v: Vec<String> = val
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
-        if !v.is_empty() {
-            return v;
-        }
-    }
-
-    vec![]
 }
 
 /* ================================================================
