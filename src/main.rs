@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use arboard::Clipboard;
-use clap::Parser;
+use clap::{Parser, ArgAction};
 use clap_version_flag::colorful_version;
 
 use comfy_table::{presets::UTF8_FULL, ContentArrangement, Table};
