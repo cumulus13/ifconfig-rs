@@ -17,6 +17,8 @@ use std::process::Command;
 
 use arboard::Clipboard;
 use clap::Parser;
+use clap_version_flag::colorful_version;
+
 use comfy_table::{presets::UTF8_FULL, ContentArrangement, Table};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -307,12 +309,15 @@ fn apply_style(text: &str, style: &StyleDef) -> String {
 #[derive(Parser)]
 #[command(
     name = "ifconfig",
-    version,
+    version = env!("CARGO_PKG_VERSION"),
     about = "Advanced Windows network interface configuration tool",
     long_about = "A rich-featured Windows alternative to ifconfig/ipconfig \
                   with colored output, backup/restore, and clipboard integration."
 )]
 struct Args {
+    #[arg(short='V', long, action=ArgAction::SetTrue)]
+    version: bool,
+
     /// Show output in rich table format
     #[arg(short = 't', long = "table")]
     table: bool,
@@ -1063,6 +1068,12 @@ fn main() {
     // Initialize tracing for structured logging (no-op in release by default)
     tracing_subscriber::fmt::init();
 
+    let os_args: Vec<String> = std::env::args().collect();
+    if os_args.len() == 2 && (os_args[1] == "-V" || os_args[1] == "--version") {
+        let version = colorful_version!();
+        version.print_and_exit();
+    }
+    
     let args = Args::parse();
     let (cfg, backup_path) = load_config();
 

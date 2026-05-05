@@ -1,6 +1,6 @@
 [package]
 name = "ifconfig-rs"
-version = "1.0.15"
+version = "1.0.16"
 authors = ["Hadi Cahyadi <cumulus13@gmail.com>"]
 description = "Advanced Windows network interface configuration tool with rich terminal output"
 repository = "https://github.com/cumulus13/ifconfig-rs"
@@ -24,6 +24,7 @@ panic = "abort"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
+clap-version-flag = "1.0.7"
 comfy-table = "7.1"
 dirs = "5.0"
 serde = { version = "1.0", features = ["derive"] }
