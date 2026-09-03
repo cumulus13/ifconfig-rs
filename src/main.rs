@@ -308,6 +308,9 @@ struct Args {
 
     #[arg(long = "examples", help = "Show usage examples")]
     examples: bool,
+
+    #[arg(long = "csv", help = "Output as CSV")]
+    csv: bool,
 }
 
 // =============================================================================
@@ -1082,6 +1085,11 @@ mod platform {
     pub fn run(args: Args, cfg: Config, backup_path: PathBuf) {
         if args.examples {
             show_help_examples(&cfg);
+            return;
+        }
+
+        if args.csv {
+            println!("CSV requested");
             return;
         }
 
