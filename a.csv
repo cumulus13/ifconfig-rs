@@ -1,0 +1,6 @@
+Interface,Status,IPv4,Netmask,MAC,Gateway,DNS,Speed,MTU
+Local Area Connection* 1,Down,169.254.32.136,255.255.0.0,62:ff:9e:90:0f:0a,-,18446744073709 Mbps,1500
+Local Area Connection* 2,Down,169.254.39.167,255.255.0.0,62:ff:9e:90:1f:1a,-,18446744073709 Mbps,1500
+Wi-Fi,Up,10.90.1.164,255.255.255.0,60:ff:9e:90:2f:2a,10.90.1.1,866 Mbps,1492
+Bluetooth Network Connection,Down,169.254.173.184,255.255.0.0,60:ff:9e:90:2f:2b,-,3 Mbps,1500
+Loopback Pseudo-Interface 1,Up,127.0.0.1,255.0.0.0,-,-,1073 Mbps,4294967295

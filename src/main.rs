@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use clap_version_flag::colorful_version;
 use serde::{Deserialize, Serialize};
+use csv::Writer;
 
 // =============================================================================
 // ERROR HANDLING (Cross-platform)
@@ -308,6 +309,9 @@ struct Args {
 
     #[arg(long = "examples", help = "Show usage examples")]
     examples: bool,
+
+    #[arg(long = "csv", help = "Output as CSV")]
+    csv: bool,
 }
 
 // =============================================================================
@@ -1051,6 +1055,40 @@ mod platform {
         println!("  ifconfig.exe -g vmnet8");
     }
 
+    fn print_as_csv(interfaces: &[Interface]) {
+        let mut writer = Writer::from_writer(std::io::stdout());
+        writer 
+            .write_record([
+                "Interface",
+                "Status",
+                "IPv4",
+                "Netmask",
+                "MAC",
+                "Gateway",
+                "DNS",
+                "Speed",
+                "MTU",
+            ])
+            .unwrap();
+        for iface in interfaces {
+            let status = iface.status.chars().skip(2).collect::<String>();
+            writer 
+                .write_record([
+                    &iface.name,
+                    status.trim(),
+                    &iface.ipv4,
+                    &iface.netmask,
+                    &iface.mac,
+                    &iface.gateway,
+                    &iface.dns.join(";"),
+                    &iface.speed,
+                    &iface.mtu,
+            ])
+            .unwrap();
+        }
+        writer.flush().unwrap();
+    }
+
     // -------------------------------------------------------------------------
     // Admin Check
     // -------------------------------------------------------------------------
@@ -1213,7 +1251,9 @@ mod platform {
             return;
         }
 
-        if args.table {
+        if args.csv {
+            print_as_csv(&display_interfaces);
+        } else if args.table {
             print_as_table(&display_interfaces, &cfg);
         } else {
             print_as_list(&display_interfaces, &cfg);
